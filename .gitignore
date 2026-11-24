@@ -1,0 +1,11 @@
+# Python / MicroPython
+.venv/
+secrets.py
+state.json
+
+# ESP-IDF
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+secrets.h

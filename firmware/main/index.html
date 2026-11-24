@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>S3 Playground</title>
+<style>
+  :root { --bg:#0f1115; --card:#181b22; --line:#262a33; --text:#e8eaf0; --dim:#8b91a0; --ok:#3ecf6e; --off:#5a6070; --accent:#7aa2ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text);
+         display:flex; justify-content:center; padding:24px 16px; }
+  main { width:100%; max-width:520px; display:flex; flex-direction:column; gap:14px; }
+  header { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  h1 { font-size:20px; margin:0; }
+  #ver { font:12px ui-monospace,Consolas,monospace; color:var(--dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  .card h2 { font-size:12px; text-transform:uppercase; letter-spacing:.8px; color:var(--dim); margin:0 0 10px; font-weight:600; }
+  dl { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; margin:0; }
+  dt { color:var(--dim); font-size:13px; }
+  dd { margin:0; font-variant-numeric:tabular-nums; text-align:right; overflow-wrap:anywhere; }
+  .pills { display:flex; flex-wrap:wrap; gap:8px; }
+  .pill { display:flex; align-items:center; gap:7px; padding:6px 11px; border-radius:999px; border:1px solid var(--line); font-size:13px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--off); }
+  .pill.on .dot { background:var(--ok); box-shadow:0 0 8px var(--ok); }
+  #status { font-size:12px; color:var(--dim); text-align:center; }
+  #status.err { color:#ff6b6b; }
+</style>
+</head>
+<body>
+<main>
+  <header><h1>S3 Playground</h1><span id="ver">…</span></header>
+
+  <section class="card">
+    <h2>USB</h2>
+    <div class="pills">
+      <span class="pill" id="p-mounted"><span class="dot"></span>Connected to PC</span>
+      <span class="pill" id="p-suspended"><span class="dot"></span>PC asleep</span>
+      <span class="pill" id="p-cdc"><span class="dot"></span>Serial open</span>
+    </div>
+    <dl style="margin-top:12px"><dt>BOOT presses (Play/Pause)</dt><dd id="keys">–</dd></dl>
+  </section>
+
+  <section class="card">
+    <h2>System</h2>
+    <dl>
+      <dt>Uptime</dt><dd id="uptime">–</dd>
+      <dt>Free RAM / PSRAM</dt><dd id="mem">–</dd>
+      <dt>Wi-Fi</dt><dd id="wifi">–</dd>
+      <dt>Running slot</dt><dd id="part">–</dd>
+      <dt>Built</dt><dd id="built">–</dd>
+      <dt>ESP-IDF</dt><dd id="idf">–</dd>
+    </dl>
+  </section>
+
+  <div id="status">connecting…</div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const kb = n => (n / 1024).toFixed(0) + " KB";
+function dur(s) { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return (d ? d + "d " : "") + (d || h ? h + "h " : "") + m + "m " + (s % 60) + "s"; }
+function pill(id, on) { $(id).classList.toggle("on", !!on); }
+async function tick() {
+  try {
+    const i = await (await fetch("/api/info", { cache: "no-store" })).json();
+    $("ver").textContent = i.version;
+    pill("p-mounted", i.usb.mounted); pill("p-suspended", i.usb.suspended); pill("p-cdc", i.usb.cdc_open);
+    $("keys").textContent = i.usb.key_presses;
+    $("uptime").textContent = dur(i.uptime_s);
+    $("mem").textContent = kb(i.heap_free) + " / " + (i.psram_free / 1048576).toFixed(1) + " MB";
+    $("wifi").textContent = i.ip + " · " + i.rssi + " dBm";
+    $("part").textContent = i.partition;
+    $("built").textContent = i.built;
+    $("idf").textContent = i.idf;
+    $("status").textContent = "live · updates every second"; $("status").className = "";
+  } catch (e) { $("status").textContent = "offline"; $("status").className = "err"; }
+}
+tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>
