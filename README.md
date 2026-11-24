@@ -13,6 +13,7 @@ What v0.1 does:
 - **USB:** one composite device "S3 Playground" (VID:PID 303A:4010):
   - a CDC serial port with a tiny shell (`help`, `info`, `led r g b`)
   - an HID consumer-control interface: the **BOOT** button sends Play/Pause to the PC
+- **Microphone:** I2S MEMS mic (MSM261S4030H0) at 48 kHz. Wiring: V→3V3, G and LR→GND, WS→GPIO4, CK→GPIO5, DA→GPIO6. The status page shows a live level meter (RMS + held peak); `/api/mic` serves the levels as JSON.
 - **Wi-Fi:** reachable at `s3-playground.local`. The status page at `/` shows USB state, uptime, memory and the running slot, and `/api/info` serves the same as JSON.
 - **OTA:** two 4 MB app slots, upload with `POST /ota`. A new image must reach Wi-Fi within 60 s or the bootloader rolls back to the previous one. Images from other projects are refused.
 - **Status LED:**
@@ -34,7 +35,7 @@ A phone-friendly page for the RGB LED: colour picker, presets, Solid, Breathe an
 `factory-backup/` holds the board's original MicroPython demo.
 
 ## Roadmap
-1. ✅ Hello USB: CDC + HID, OTA over Wi-Fi
+1. ✅ Hello USB: CDC + HID, OTA over Wi-Fi; I2S mic level meter
 2. "S3 Audio": a UAC2 sound card. Analyse what the PC sends (rate, format, volume, mute, levels); the LED reacts to the music.
 3. I2S MEMS microphone (MSM261S4030H0 on GPIO4/5/6), turning the board into a USB mic as well.
 4. ES8311 codec for real headphone or speaker output, then the full USB audio interface board.

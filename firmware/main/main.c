@@ -3,6 +3,7 @@
 #include "esp_app_desc.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "mic.h"
 #include "net.h"
 #include "nvs_flash.h"
 #include "status_led.h"
@@ -25,6 +26,7 @@ void app_main(void)
     ESP_ERROR_CHECK(err);
 
     usb_start();
+    mic_start();
     net_start();
 
     esp_ota_img_states_t st;

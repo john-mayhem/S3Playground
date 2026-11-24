@@ -22,6 +22,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
 #include "mdns.h"
+#include "mic.h"
 #include "status_led.h"
 #include "usb.h"
 
@@ -88,6 +89,17 @@ static esp_err_t get_info(httpd_req_t *req)
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
              esp_reset_reason(), IP2STR(&ip.ip), rssi, run->label, u.mounted ? "true" : "false",
              u.suspended ? "true" : "false", u.cdc_open ? "true" : "false", (unsigned long)u.key_presses);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_sendstr(req, buf);
+}
+
+static esp_err_t get_mic(httpd_req_t *req)
+{
+    mic_level_t m = mic_read_level();
+    char buf[128];
+    snprintf(buf, sizeof(buf), "{\"rms_db\":%.1f,\"peak_db\":%.1f,\"alive\":%s,\"rate\":%d}", m.rms_db, m.peak_db,
+             m.alive ? "true" : "false", m.rate);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_sendstr(req, buf);
@@ -181,6 +193,7 @@ static void start_http(void)
     const httpd_uri_t uris[] = {
         {.uri = "/", .method = HTTP_GET, .handler = get_index},
         {.uri = "/api/info", .method = HTTP_GET, .handler = get_info},
+        {.uri = "/api/mic", .method = HTTP_GET, .handler = get_mic},
         {.uri = "/ota", .method = HTTP_POST, .handler = post_ota},
     };
     for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
