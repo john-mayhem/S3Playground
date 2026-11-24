@@ -12,6 +12,8 @@ static led_strip_handle_t strip;
 static volatile led_state_t state = LED_BOOT;
 static volatile int64_t flash_until;
 static volatile uint8_t flash_rgb[3];
+static volatile int64_t audio_until;
+static volatile uint8_t audio_rgb[3];
 
 static void put(uint8_t r, uint8_t g, uint8_t b)
 {
@@ -25,8 +27,11 @@ static void led_task(void *arg)
         bool on2 = (tick / 25) % 2;   // 2 Hz at 20 ms ticks
         bool on5 = (tick / 10) % 2;   // 5 Hz
         bool on1 = (tick / 50) % 2;   // 1 Hz
-        if (esp_timer_get_time() < flash_until) {
+        int64_t now = esp_timer_get_time();
+        if (now < flash_until) {
             put(flash_rgb[0], flash_rgb[1], flash_rgb[2]);
+        } else if (now < audio_until && state != LED_OTA) {
+            put(audio_rgb[0], audio_rgb[1], audio_rgb[2]);
         } else {
             switch (state) {
             case LED_BOOT:         put(6, 6, 6); break;
@@ -61,4 +66,12 @@ void status_led_flash(uint8_t r, uint8_t g, uint8_t b)
     flash_rgb[1] = g;
     flash_rgb[2] = b;
     flash_until = esp_timer_get_time() + 120 * 1000;
+}
+
+void status_led_audio(uint8_t r, uint8_t g, uint8_t b)
+{
+    audio_rgb[0] = r;
+    audio_rgb[1] = g;
+    audio_rgb[2] = b;
+    audio_until = esp_timer_get_time() + 200 * 1000;
 }

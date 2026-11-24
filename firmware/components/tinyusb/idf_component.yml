@@ -1,0 +1,6 @@
+# Local copy of espressif/tinyusb 0.21.0~6 (commit ab2826e0), trimmed to what the ESP32-S3 build uses.
+# Patched: see PATCHES.md. Used via override_path in main/idf_component.yml.
+dependencies:
+  idf: '>=5.0'
+description: TinyUSB (S3Playground patched copy)
+version: 0.21.0~6

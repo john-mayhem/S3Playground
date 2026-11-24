@@ -29,6 +29,19 @@
   #m-peak { position:absolute; top:0; bottom:0; width:2px; left:0; background:#fff; opacity:.85; transition:left 90ms linear; }
   .scale { display:flex; justify-content:space-between; font:11px ui-monospace,Consolas,monospace; color:var(--dim); margin:4px 2px 10px; }
   #m-state.bad { color:#ff6b6b; }
+  .fmt { font-size:22px; font-weight:600; letter-spacing:.2px; margin:2px 0 2px; font-variant-numeric:tabular-nums; }
+  .fmt.idle { color:var(--dim); font-weight:500; font-size:17px; }
+  .sub { font-size:12px; color:var(--dim); margin-bottom:12px; font-variant-numeric:tabular-nums; }
+  .ch { display:grid; grid-template-columns:14px 1fr 64px; align-items:center; gap:8px; margin:6px 0; font-size:12px; color:var(--dim); }
+  .ch .meter { height:12px; }
+  .ch .v { text-align:right; font:12px ui-monospace,Consolas,monospace; color:var(--text); }
+  .lvl { position:absolute; inset:0 auto 0 0; width:0; border-radius:6px; transition:width 90ms linear;
+         background:linear-gradient(90deg,#3ecf6e 0%,#3ecf6e 65%,#f5c542 82%,#ff6b6b 100%); background-size:var(--full,300px) 100%; }
+  .pk { position:absolute; top:0; bottom:0; width:2px; left:0; background:#fff; opacity:.85; transition:left 90ms linear; }
+  .warn { color:#f5c542; } .bad2 { color:#ff6b6b; }
+  #a-log { list-style:none; margin:12px 0 0; padding:10px 0 0; border-top:1px solid var(--line);
+           font:12px/1.6 ui-monospace,Consolas,monospace; max-height:180px; overflow:auto; }
+  #a-log li { display:flex; gap:10px; } #a-log .t { color:var(--dim); min-width:58px; text-align:right; }
   #status { font-size:12px; color:var(--dim); text-align:center; }
   #status.err { color:#ff6b6b; }
 </style>
@@ -45,6 +58,29 @@
       <span class="pill" id="p-cdc"><span class="dot"></span>Serial open</span>
     </div>
     <dl style="margin-top:12px"><dt>BOOT presses (Play/Pause)</dt><dd id="keys">–</dd></dl>
+  </section>
+
+  <section class="card">
+    <h2>S3 Audio · what the PC sends</h2>
+    <div class="pills" style="margin-bottom:10px">
+      <span class="pill" id="a-p-open"><span class="dot"></span>Stream open</span>
+      <span class="pill" id="a-p-mute"><span class="dot"></span>Muted</span>
+      <span class="pill" id="a-p-mono"><span class="dot"></span>Mono content</span>
+    </div>
+    <div class="fmt idle" id="a-fmt">not playing – pick "S3 Audio" as output and play something</div>
+    <div class="sub" id="a-sub">&nbsp;</div>
+    <div class="ch"><span>L</span><div class="meter"><div class="lvl" id="a-l"></div><div class="pk" id="a-lp"></div></div><span class="v" id="a-lv">–</span></div>
+    <div class="ch"><span>R</span><div class="meter"><div class="lvl" id="a-r"></div><div class="pk" id="a-rp"></div></div><span class="v" id="a-rv">–</span></div>
+    <div class="scale" style="margin-left:22px;margin-right:72px"><span>-90</span><span>-60</span><span>-30</span><span>0</span></div>
+    <dl>
+      <dt>PC volume slider</dt><dd id="a-vol">–</dd>
+      <dt>Bits carrying signal</dt><dd id="a-bits">–</dd>
+      <dt>Packets (frames each)</dt><dd id="a-pk">–</dd>
+      <dt>Lost packets</dt><dd id="a-lost">–</dd>
+      <dt>Clipped samples</dt><dd id="a-clip">0</dd>
+      <dt>Stream opened</dt><dd id="a-opens">–</dd>
+    </dl>
+    <ul id="a-log"></ul>
   </section>
 
   <section class="card">
@@ -115,6 +151,53 @@ async function mic() {
   micBusy = false;
 }
 setInterval(mic, 100);
+
+// S3 Audio: the board resets its counters on every read, so peaks are held here
+const A = { hold:[FLOOR,FLOOR], holdAt:[0,0], rate:0, clip:0, busy:false };
+const fmtRate = r => (r % 1000 ? (r / 1000).toFixed(1) : r / 1000) + " kHz";
+function ago(ms, now) { const s = Math.max(0, Math.round((now - ms) / 1000));
+  return s < 60 ? s + " s" : s < 3600 ? Math.floor(s / 60) + " min" : Math.floor(s / 3600) + " h"; }
+async function audio() {
+  if (A.busy) return; A.busy = true;
+  try {
+    const a = await (await fetch("/api/audio", { cache: "no-store" })).json();
+    const now = performance.now();
+    pill("a-p-open", a.streaming); pill("a-p-mute", a.muted); pill("a-p-mono", a.streaming && a.mono);
+    const fmt = $("a-fmt");
+    if (a.streaming) {
+      fmt.className = "fmt"; fmt.textContent = fmtRate(a.rate_set) + " · " + a.bits + "-bit · stereo";
+      if (a.packets) A.rate = A.rate ? A.rate * 0.85 + a.rate_measured * 0.15 : a.rate_measured;
+      const ppm = A.rate ? (A.rate - a.rate_set) / a.rate_set * 1e6 : 0;
+      $("a-sub").textContent = a.packets ? "arriving at " + A.rate.toFixed(1) + " Hz (" + (ppm >= 0 ? "+" : "") + ppm.toFixed(0) + " ppm)"
+                                         : "stream open, but no packets arriving";
+    } else {
+      fmt.className = "fmt idle"; fmt.textContent = "not playing – pick “S3 Audio” as output and play something";
+      $("a-sub").textContent = "last format: " + fmtRate(a.rate_set); A.rate = 0;
+    }
+    $("meter").style.setProperty("--full", $("meter").clientWidth + "px");
+    ["l","r"].forEach((c, i) => {
+      const rms = a.streaming ? a.rms_db[i] : FLOOR, pk = a.streaming ? a.peak_db[i] : FLOOR;
+      if (pk >= A.hold[i] || now - A.holdAt[i] > 1500) { A.hold[i] = pk; A.holdAt[i] = now; }
+      const el = $("a-" + c); el.style.width = pct(rms) + "%";
+      el.parentElement.style.setProperty("--full", el.parentElement.clientWidth + "px");
+      $("a-" + c + "p").style.left = "calc(" + pct(A.hold[i]) + "% - 1px)";
+      $("a-" + c + "v").textContent = a.streaming && rms > -139 ? rms.toFixed(1) : "–";
+    });
+    $("a-vol").textContent = a.volume_db.toFixed(1) + " dB" + (a.muted ? " (muted)" : "");
+    $("a-bits").innerHTML = !a.streaming ? "–" : a.bits_used ? a.bits_used + " of " + a.bits +
+      (a.bits_used < a.bits ? ' <span class="warn">(padded)</span>' : "") : "silence";
+    $("a-pk").textContent = a.streaming && a.packets ? Math.round(a.packets / a.window_s) + "/s (" +
+      (a.pkt_min === a.pkt_max ? a.pkt_min : a.pkt_min + "–" + a.pkt_max) + ")" : "–";
+    $("a-lost").innerHTML = a.dropped ? '<span class="bad2">' + a.dropped + "</span>" : "0";
+    if (a.streaming) A.clip += a.clipped;
+    $("a-clip").innerHTML = A.clip ? '<span class="warn">' + A.clip + "</span>" : "0";
+    $("a-opens").textContent = a.opens + "×";
+    $("a-log").innerHTML = a.events.slice().reverse().map(e =>
+      '<li><span class="t">' + ago(e[0], a.now_ms) + '</span><span>' + e[1] + "</span></li>").join("");
+  } catch (e) {}
+  A.busy = false;
+}
+setInterval(audio, 200);
 </script>
 </body>
 </html>

@@ -22,6 +22,7 @@
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
 #include "mdns.h"
+#include "audio.h"
 #include "mic.h"
 #include "status_led.h"
 #include "usb.h"
@@ -100,6 +101,27 @@ static esp_err_t get_mic(httpd_req_t *req)
     char buf[128];
     snprintf(buf, sizeof(buf), "{\"rms_db\":%.1f,\"peak_db\":%.1f,\"alive\":%s,\"rate\":%d}", m.rms_db, m.peak_db,
              m.alive ? "true" : "false", m.rate);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_sendstr(req, buf);
+}
+
+static esp_err_t get_audio(httpd_req_t *req)
+{
+    audio_stats_t a = audio_read_stats();
+    static char buf[1600];
+    int n = snprintf(buf, sizeof(buf),
+                     "{\"streaming\":%s,\"rate_set\":%lu,\"rate_measured\":%.1f,\"bits\":%u,\"bits_used\":%u,"
+                     "\"muted\":%s,\"volume_db\":%.1f,\"packets\":%lu,\"pkt_min\":%u,\"pkt_max\":%u,\"dropped\":%lu,"
+                     "\"opens\":%lu,\"rms_db\":[%.1f,%.1f],\"peak_db\":[%.1f,%.1f],\"clipped\":%lu,\"mono\":%s,"
+                     "\"window_s\":%.3f,\"now_ms\":%lu,\"events\":[",
+                     a.streaming ? "true" : "false", (unsigned long)a.rate_set, a.rate_measured, a.bits, a.bits_used,
+                     a.muted ? "true" : "false", a.volume_db, (unsigned long)a.packets, a.pkt_min, a.pkt_max,
+                     (unsigned long)a.dropped, (unsigned long)a.opens, a.rms_db[0], a.rms_db[1], a.peak_db[0], a.peak_db[1],
+                     (unsigned long)a.clipped, a.mono ? "true" : "false", a.window_s,
+                     (unsigned long)(esp_timer_get_time() / 1000));
+    n += audio_events(buf + n, sizeof(buf) - n - 4);
+    snprintf(buf + n, sizeof(buf) - n, "]}");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_sendstr(req, buf);
@@ -194,6 +216,7 @@ static void start_http(void)
         {.uri = "/", .method = HTTP_GET, .handler = get_index},
         {.uri = "/api/info", .method = HTTP_GET, .handler = get_info},
         {.uri = "/api/mic", .method = HTTP_GET, .handler = get_mic},
+        {.uri = "/api/audio", .method = HTTP_GET, .handler = get_audio},
         {.uri = "/ota", .method = HTTP_POST, .handler = post_ota},
     };
     for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {

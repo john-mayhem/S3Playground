@@ -1,6 +1,7 @@
 // Native USB port (TinyUSB): one composite device "S3 Playground" with
 //   - CDC serial port: a tiny command shell (help / info / led r g b)
 //   - HID consumer control: the BOOT button sends Play/Pause to the PC
+//   - "S3 Audio": a UAC2 stereo speaker, up to 96 kHz / 24-bit (audio.c analyses what arrives)
 #include "usb.h"
 
 #include <stdio.h>
@@ -13,6 +14,7 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "audio.h"
 #include "status_led.h"
 #include "tinyusb.h"
 #include "tusb_cdc_acm.h"
@@ -22,23 +24,25 @@ static const char *TAG = "usb";
 #define BOOT_GPIO 0
 #define USB_VID 0x303A    // Espressif
 #define USB_PID 0x4010    // our own pick; change bcdDevice when the descriptors change so Windows re-reads them
-#define USB_BCD 0x0100
+#define USB_BCD 0x0200    // 0x0200: added S3 Audio
 
-enum { ITF_CDC = 0, ITF_CDC_DATA, ITF_HID, ITF_COUNT };
-enum { STR_LANG, STR_MANUF, STR_PRODUCT, STR_SERIAL, STR_CDC, STR_HID, STR_COUNT };
+enum { ITF_CDC = 0, ITF_CDC_DATA, ITF_HID, ITF_AUDIO_CTRL, ITF_AUDIO_STREAM, ITF_COUNT };
+enum { STR_LANG, STR_MANUF, STR_PRODUCT, STR_SERIAL, STR_CDC, STR_HID, STR_AUDIO, STR_COUNT };
 
 #define EP_CDC_NOTIF 0x81
 #define EP_CDC_OUT   0x02
 #define EP_CDC_IN    0x82
 #define EP_HID_IN    0x83
+#define EP_AUDIO_OUT 0x04
 
 static const uint8_t hid_report[] = {TUD_HID_REPORT_DESC_CONSUMER()};
 
-#define CONFIG_LEN (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_HID_DESC_LEN)
+#define CONFIG_LEN (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_HID_DESC_LEN + S3A_DESC_LEN)
 static const uint8_t config_desc[] = {
     TUD_CONFIG_DESCRIPTOR(1, ITF_COUNT, 0, CONFIG_LEN, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
     TUD_CDC_DESCRIPTOR(ITF_CDC, STR_CDC, EP_CDC_NOTIF, 8, EP_CDC_OUT, EP_CDC_IN, 64),
     TUD_HID_DESCRIPTOR(ITF_HID, STR_HID, HID_ITF_PROTOCOL_NONE, sizeof(hid_report), EP_HID_IN, 16, 10),
+    S3A_DESCRIPTOR(ITF_AUDIO_CTRL, ITF_AUDIO_STREAM, EP_AUDIO_OUT, STR_AUDIO),
 };
 
 static const tusb_desc_device_t device_desc = {
@@ -66,6 +70,7 @@ static const char *strings[STR_COUNT] = {
     [STR_SERIAL] = serial_str,
     [STR_CDC] = "S3 Playground Serial",
     [STR_HID] = "S3 Playground Keys",
+    [STR_AUDIO] = "S3 Audio",
 };
 
 static volatile bool cdc_dtr;
@@ -201,6 +206,7 @@ void usb_start(void)
         .string_descriptor_count = STR_COUNT,
         .configuration_descriptor = config_desc,
     };
+    audio_start(ITF_AUDIO_STREAM);
     ESP_ERROR_CHECK(tinyusb_driver_install(&cfg));
 
     const tinyusb_config_cdcacm_t acm = {

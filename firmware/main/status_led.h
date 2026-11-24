@@ -12,3 +12,4 @@ typedef enum {
 void status_led_init(void);
 void status_led_state(led_state_t s);
 void status_led_flash(uint8_t r, uint8_t g, uint8_t b);   // one short flash on top of the state colour
+void status_led_audio(uint8_t r, uint8_t g, uint8_t b);  // music level colour; overrides the state colour for 200 ms

@@ -1,5 +1,9 @@
 dependencies:
   idf: ">=5.5"
   espressif/esp_tinyusb: "^1.7.0"
+  # patched local copy (one-packet RX FIFO so 96 kHz/24-bit audio fits); see components/tinyusb/PATCHES.md
+  espressif/tinyusb:
+    version: "0.21.0~6"
+    override_path: "../components/tinyusb"
   espressif/led_strip: "^3.0.0"
   espressif/mdns: "^1.8.0"
